@@ -3,6 +3,7 @@ const EMAIL = process.env.EMAIL || "";
 const PASSWORD = process.env.PASSWORD || "";
 const SEAT_COUNT = process.env.SEAT_COUNT || "4";
 const TYPE_FILTER = process.env.TYPE_FILTER || "Indoor";
+const RECON_MODE = process.env.RECON_MODE || "TRUE";
 const RESTAURANT_URL =
   process.env.RESTAURANT_URL || "https://resy.com/cities/ny/stk-meatpacking";
 
@@ -97,14 +98,14 @@ export const handler = async (
 
     console.log("Page Created");
 
-    console.log("15 second delay start");
-    delay(15 * 1000);
-    console.log("15 second delay end");
+    console.log("10 second delay start");
+    delay(10 * 1000);
+    console.log("10 second delay end");
 
     await page.goto(url, { waitUntil: "domcontentloaded" });
 
-    // Delay 5 seconds
-    await delay(5000);
+    // Delay 3 seconds
+    await delay(3000);
 
     // Log "loaded" message
     console.log("First Page Loaded");
@@ -113,31 +114,34 @@ export const handler = async (
     // // // // //
     // LOGIN
 
-    // Click "login" button
-    await page.click(".Button--login");
+    // SKIP LOGIN if RECON_MODE === TRUE
+    if (RECON_MODE !== "TRUE") {
+      // Click "login" button
+      await page.click(".Button--login");
 
-    // Delay 2s
-    await delay(1500);
+      // Delay 1.5s
+      await delay(1500);
 
-    // Click "Login with email + password" button
-    await page.click(".AuthView__Footer > Button");
+      // Click "Login with email + password" button
+      await page.click(".AuthView__Footer > Button");
 
-    // Delay + type email
-    await delay(250);
-    await page.type("#email", EMAIL);
+      // Delay + type email
+      await delay(250);
+      await page.type("#email", EMAIL);
 
-    // Delay + type password
-    await delay(1000);
-    await page.type("#password", PASSWORD);
+      // Delay + type password
+      await delay(1000);
+      await page.type("#password", PASSWORD);
 
-    // Click login button
-    const loginButton = await page.$(".Button--primary");
-    await loginButton?.click();
-    console.log(`Login Button Found? ${String(!!loginButton)}`);
+      // Click login button
+      const loginButton = await page.$(".Button--primary");
+      await loginButton?.click();
+      console.log(`Login Button Found? ${String(!!loginButton)}`);
 
-    console.log("LoggedIn!");
+      console.log("LoggedIn!");
 
-    await delay(3000);
+      await delay(2000);
+    }
 
     // // // // //
     // // // // //
@@ -145,14 +149,14 @@ export const handler = async (
 
     console.log("Scroll start");
 
-    // Scroll down 600px
+    // Scroll down 800px
     await page.evaluate(() => {
       window.scrollBy(0, 800);
     });
 
     console.log("Scroll done");
 
-    // Delay 3s
+    // Delay 2.5s
     await delay(2500);
 
     console.log("Start reservation lookup");
@@ -182,6 +186,11 @@ export const handler = async (
     }
     selectedReservation.button.click();
 
+    // Short-circuit IFF RECON_MODE === TRUE
+    if (RECON_MODE === "TRUE") {
+      return;
+    }
+
     //////////////
 
     // Delay 5s
@@ -205,8 +214,8 @@ export const handler = async (
     await page.goto(iframeSrc, { waitUntil: "domcontentloaded" });
     console.log("Navigated to reserve page");
 
-    // Wait 5x
-    await delay(5000);
+    // Wait 3x
+    await delay(3000);
 
     // // // //
 
@@ -215,7 +224,7 @@ export const handler = async (
     await reserveButton?.click();
     console.log(`reserveButton Defined? ${String(!!reserveButton)}`);
 
-    await delay(3000);
+    await delay(2000);
 
     // Click "Confirm" button
     // UNCOMMENT THIS FOR LIVE FIRE
@@ -225,7 +234,7 @@ export const handler = async (
     console.log("Reservation confirmed!");
 
     console.log("Start delay");
-    await delay(5000);
+    await delay(4000);
     console.log("End delay");
 
     // Log "reserving" message
