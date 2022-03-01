@@ -30,6 +30,7 @@ export class PdfTextractPipeline extends cdk.Stack {
           TYPE_FILTER: "Standard",
           SEAT_COUNT: "4",
           RESTAURANT_URL: "https://resy.com/cities/ny/stk-meatpacking",
+          RECON_MODE: "TRUE",
         },
       }
     );
