@@ -75,6 +75,7 @@ export const handler = async (
 
   // Log URL
   console.log("url");
+
   console.log(url);
 
   console.log("dateParam");
@@ -103,6 +104,8 @@ export const handler = async (
     console.log("10 second delay end");
 
     await page.goto(url, { waitUntil: "domcontentloaded" });
+
+    await page.screenshot({ path: "/tmp/page-load.png" });
 
     // Delay 3 seconds
     await delay(3000);
@@ -140,6 +143,8 @@ export const handler = async (
 
       console.log("LoggedIn!");
 
+      await page.screenshot({ path: "/tmp/after-login.png" });
+
       await delay(2000);
     }
 
@@ -155,6 +160,8 @@ export const handler = async (
     });
 
     console.log("Scroll done");
+
+    await page.screenshot({ path: "/tmp/after-scroll.png" });
 
     // Delay 2.5s
     await delay(2500);
@@ -186,6 +193,8 @@ export const handler = async (
     }
     selectedReservation.button.click();
 
+    await page.screenshot({ path: "/tmp/after-reservation.png" });
+
     // Short-circuit IFF RECON_MODE === TRUE
     if (RECON_MODE === "TRUE") {
       return;
@@ -195,6 +204,8 @@ export const handler = async (
 
     // Delay 5s
     await delay(5000);
+
+    await page.screenshot({ path: "/tmp/after-delay.png" });
 
     // Get the source of the desired iframe
     const iframeSrc = await page.evaluate(
@@ -217,6 +228,7 @@ export const handler = async (
     // Wait 3x
     await delay(3000);
 
+    await page.screenshot({ path: "/tmp/before-reserve.png" });
     // // // //
 
     // Click "Reserve" button
@@ -226,12 +238,15 @@ export const handler = async (
 
     await delay(2000);
 
+    await page.screenshot({ path: "/tmp/before-confirm.png" });
+
     // Click "Confirm" button
-    // UNCOMMENT THIS FOR LIVE FIRE
     const confirmButton = await page.$(".Button--double-confirm");
     await confirmButton?.click();
     console.log(`ConfirmButton Defined? ${String(!!confirmButton)}`);
     console.log("Reservation confirmed!");
+
+    await page.screenshot({ path: "/tmp/after-confirm.png" });
 
     console.log("Start delay");
     await delay(4000);
