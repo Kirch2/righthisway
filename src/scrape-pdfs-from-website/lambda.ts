@@ -1,11 +1,20 @@
 import * as chromium from "chrome-aws-lambda";
+import * as fs from "fs";
+import * as AWS from "aws-sdk";
+import { Page } from "puppeteer";
+const s3obj = new AWS.S3();
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || "";
 const EMAIL = process.env.EMAIL || "";
 const PASSWORD = process.env.PASSWORD || "";
 const SEAT_COUNT = process.env.SEAT_COUNT || "4";
 const TYPE_FILTER = process.env.TYPE_FILTER || "Indoor";
-const RECON_MODE = process.env.RECON_MODE || "TRUE";
+const RECON_MODE: boolean = process.env.RECON_MODE === "TRUE";
+const ENABLE_SCREENSHOTS: boolean = process.env.ENABLE_SCREENSHOTS === "TRUE";
 const RESTAURANT_URL =
   process.env.RESTAURANT_URL || "https://resy.com/cities/ny/stk-meatpacking";
+
+// Start time of the lambda
+const startTime = Number(new Date());
 
 // // // //
 
@@ -16,6 +25,60 @@ function delay(timeout: number) {
       resolve(true);
     }, timeout);
   });
+}
+
+// // // //
+
+// Array to store all screenshot filepaths
+const SCREENSHOTS: string[] = [];
+
+function uploadToS3(props: { path: string }) {
+  const filepath = props.path;
+
+  // We want
+  // - restaurant-name/getDateParam()/seat-count/start-time/screenshot.png
+
+  // 1 - get name of the screenshot.png
+  // Takes "/tmp/file.png" and makes "file.png"
+  const filename = filepath.replace("/tmp/", "");
+  const restaurantName = RESTAURANT_URL.replace(
+    "https://resy.com/cities/ny/",
+    ""
+  );
+
+  // TODO - build this string
+  const destinationPath = `${restaurantName}/${getDateParam()}/${SEAT_COUNT}/${startTime}/${filename}`;
+
+  // Saves new file to S3
+  return new Promise((resolve, reject) => {
+    s3obj
+      .upload({
+        Bucket: S3_BUCKET_NAME,
+        Key: destinationPath,
+        Body: fs.readFileSync(filepath),
+      })
+      .send((err, data) => {
+        console.log(err, data);
+        // Logs error
+        if (err) {
+          console.log(`upload-file --> ERROR`);
+          console.log(err);
+          reject(err);
+          return;
+        }
+        console.log(`upload-file --> SUCCESS --> ${filepath}`);
+        resolve(true);
+      });
+  });
+}
+
+function takeScreenshot(page: Page, filename: string) {
+  if (ENABLE_SCREENSHOTS === false) {
+    return;
+  }
+  const filepath = `/tmp/${filename}`;
+  SCREENSHOTS.push(filepath);
+  return page.screenshot({ path: filepath });
 }
 
 // // // //
@@ -99,16 +162,16 @@ export const handler = async (
 
     console.log("Page Created");
 
-    console.log("10 second delay start");
-    delay(10 * 1000);
-    console.log("10 second delay end");
+    // console.log("10 second delay start");
+    // delay(10 * 1000);
+    // console.log("10 second delay end");
 
     await page.goto(url, { waitUntil: "domcontentloaded" });
 
-    await page.screenshot({ path: "/tmp/page-load.png" });
-
     // Delay 3 seconds
     await delay(3000);
+
+    await takeScreenshot(page, "page-load.png");
 
     // Log "loaded" message
     console.log("First Page Loaded");
@@ -118,7 +181,7 @@ export const handler = async (
     // LOGIN
 
     // SKIP LOGIN if RECON_MODE === TRUE
-    if (RECON_MODE !== "TRUE") {
+    if (RECON_MODE === false) {
       // Click "login" button
       await page.click(".Button--login");
 
@@ -143,7 +206,7 @@ export const handler = async (
 
       console.log("LoggedIn!");
 
-      await page.screenshot({ path: "/tmp/after-login.png" });
+      await takeScreenshot(page, "after-login.png");
 
       await delay(2000);
     }
@@ -161,7 +224,7 @@ export const handler = async (
 
     console.log("Scroll done");
 
-    await page.screenshot({ path: "/tmp/after-scroll.png" });
+    await takeScreenshot(page, "after-scroll.png");
 
     // Delay 2.5s
     await delay(2500);
@@ -193,69 +256,73 @@ export const handler = async (
     }
     selectedReservation.button.click();
 
-    await page.screenshot({ path: "/tmp/after-reservation.png" });
-
-    // Short-circuit IFF RECON_MODE === TRUE
-    if (RECON_MODE === "TRUE") {
-      return;
-    }
-
-    //////////////
-
     // Delay 5s
     await delay(5000);
 
-    await page.screenshot({ path: "/tmp/after-delay.png" });
+    await takeScreenshot(page, "after-delay.png");
 
-    // Get the source of the desired iframe
-    const iframeSrc = await page.evaluate(
-      `Array.from(document.querySelectorAll('iframe')).map(f => f.getAttribute("src")).find(f => f.includes("https://widgets.resy.com"))`
-    );
+    // Actually make the reservation
+    // Short-circuit IFF RECON_MODE === TRUE
+    if (RECON_MODE === false) {
+      // Get the source of the desired iframe
+      const iframeSrc = await page.evaluate(
+        `Array.from(document.querySelectorAll('iframe')).map(f => f.getAttribute("src")).find(f => f.includes("https://widgets.resy.com"))`
+      );
 
-    if (typeof iframeSrc !== "string") {
-      console.log("Iframe Source -> not found, or not a string");
+      if (typeof iframeSrc !== "string") {
+        console.log("Iframe Source -> not found, or not a string");
+        console.log(iframeSrc);
+        return;
+      }
+
+      console.log("iframeSrc");
       console.log(iframeSrc);
-      return;
+
+      // Naviagate to reserve page
+      await page.goto(iframeSrc, { waitUntil: "domcontentloaded" });
+      console.log("Navigated to reserve page");
+
+      // Wait 3x
+      await delay(3000);
+
+      await takeScreenshot(page, "before-reserve.png");
+      // // // //
+
+      // Click "Reserve" button
+      const reserveButton = await page.$(".Button--primary");
+      await reserveButton?.click();
+      console.log(`reserveButton Defined? ${String(!!reserveButton)}`);
+
+      await delay(2000);
+
+      await takeScreenshot(page, "before-confirm.png");
+
+      // Click "Confirm" button
+      const confirmButton = await page.$(".Button--double-confirm");
+      await confirmButton?.click();
+      console.log(`ConfirmButton Defined? ${String(!!confirmButton)}`);
+      console.log("Reservation confirmed!");
+
+      await takeScreenshot(page, "after-confirm.png");
+
+      console.log("Start delay");
+      await delay(4000);
+      console.log("End delay");
+
+      // Log "reserving" message
+      console.log(
+        `Reserving: table for ${SEAT_COUNT} at ${selectedReservation.time} on ${dateParam}`
+      );
+
+      await takeScreenshot(page, "after-reservation.png");
     }
 
-    console.log("iframeSrc");
-    console.log(iframeSrc);
+    // // // // //
 
-    // Naviagate to reserve page
-    await page.goto(iframeSrc, { waitUntil: "domcontentloaded" });
-    console.log("Navigated to reserve page");
+    // Upload all screenshots to S3
+    await Promise.all(SCREENSHOTS.map((path) => uploadToS3({ path })));
 
-    // Wait 3x
-    await delay(3000);
-
-    await page.screenshot({ path: "/tmp/before-reserve.png" });
-    // // // //
-
-    // Click "Reserve" button
-    const reserveButton = await page.$(".Button--primary");
-    await reserveButton?.click();
-    console.log(`reserveButton Defined? ${String(!!reserveButton)}`);
-
-    await delay(2000);
-
-    await page.screenshot({ path: "/tmp/before-confirm.png" });
-
-    // Click "Confirm" button
-    const confirmButton = await page.$(".Button--double-confirm");
-    await confirmButton?.click();
-    console.log(`ConfirmButton Defined? ${String(!!confirmButton)}`);
-    console.log("Reservation confirmed!");
-
-    await page.screenshot({ path: "/tmp/after-confirm.png" });
-
-    console.log("Start delay");
-    await delay(4000);
-    console.log("End delay");
-
-    // Log "reserving" message
-    console.log(
-      `Reserving: table for ${SEAT_COUNT} at ${selectedReservation.time} on ${dateParam}`
-    );
+    // // // // //
 
     // Done message
     console.log("Done!");
