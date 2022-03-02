@@ -7,6 +7,7 @@ const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || "";
 const EMAIL = process.env.EMAIL || "";
 const PASSWORD = process.env.PASSWORD || "";
 const SEAT_COUNT = process.env.SEAT_COUNT || "4";
+const LOOK_AHEAD_DAY_COUNT: number = Number(process.env.LOOK_AHEAD_DAY_COUNT);
 const TYPE_FILTER = process.env.TYPE_FILTER || "Indoor";
 const RECON_MODE: boolean = process.env.RECON_MODE === "TRUE";
 const ENABLE_SCREENSHOTS: boolean = process.env.ENABLE_SCREENSHOTS === "TRUE";
@@ -78,6 +79,7 @@ function takeScreenshot(page: Page, filename: string) {
   }
   const filepath = `/tmp/${filename}`;
   SCREENSHOTS.push(filepath);
+  console.log(`takeScreenshot: ${filepath}`);
   return page.screenshot({ path: filepath });
 }
 
@@ -91,12 +93,14 @@ function leftPad(num: number) {
 }
 
 function getDateParam() {
-  const oneWeekms = 7 * 24 * 60 * 60 * 1000;
+  const lookAheadms = LOOK_AHEAD_DAY_COUNT * 24 * 60 * 60 * 1000;
   const utcOffset = 5 * 60 * 60 * 1000;
-  const oneWeekFromNow = new Date(Number(new Date()) + oneWeekms - utcOffset);
-  const month = oneWeekFromNow.getUTCMonth() + 1;
-  const day = oneWeekFromNow.getUTCDate();
-  const year = oneWeekFromNow.getUTCFullYear();
+  const reservationDate = new Date(
+    Number(new Date()) + lookAheadms - utcOffset
+  );
+  const month = reservationDate.getUTCMonth() + 1;
+  const day = reservationDate.getUTCDate();
+  const year = reservationDate.getUTCFullYear();
   const dateParam = `${year}-${leftPad(month)}-${leftPad(day)}`;
   return dateParam;
 }
@@ -252,6 +256,8 @@ export const handler = async (
     const selectedReservation = getPreferredReservation(availableReservations);
     if (!selectedReservation) {
       console.log("no available reservations");
+      // Upload all screenshots to S3
+      await Promise.all(SCREENSHOTS.map((path) => uploadToS3({ path })));
       return;
     }
     selectedReservation.button.click();
