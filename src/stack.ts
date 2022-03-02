@@ -6,6 +6,98 @@ import * as cdk from "@aws-cdk/core";
 
 // // // //
 
+interface LambdaEnvironmentVariables {
+  EMAIL: string;
+  PASSWORD: string;
+  TYPE_FILTER: string;
+  SEAT_COUNT: string;
+  LOOK_AHEAD_DAY_COUNT: string;
+  RESTAURANT_URL: string;
+  RECON_MODE: string;
+  ENABLE_SCREENSHOTS: string;
+  S3_BUCKET_NAME: string;
+}
+
+interface LambdaEnvironmentInput {
+  EMAIL?: string;
+  PASSWORD?: string;
+  TYPE_FILTER?: string;
+  SEAT_COUNT?: number;
+  LOOK_AHEAD_DAY_COUNT: number;
+  RECON_MODE?: string;
+  ENABLE_SCREENSHOTS?: boolean;
+}
+
+interface LambdaConfig {
+  restaurantSlug: string;
+  schedule?: string; // i.e "cron(0 5 ? * FRI *)"
+  environment: LambdaEnvironmentInput;
+}
+
+interface ProvisionLambdaProps {
+  stack: any; // TODO - add correct type
+  screenshotsBucket: s3.Bucket;
+  lambdaConfig: LambdaConfig;
+}
+
+function provisionLambda(props: ProvisionLambdaProps) {
+  const { restaurantSlug, schedule = "cron(0/30 * ? * * *)" } =
+    props.lambdaConfig;
+  const {
+    EMAIL = "john@doe.com",
+    PASSWORD = "mypasword123",
+    TYPE_FILTER = "",
+    SEAT_COUNT = 4,
+    LOOK_AHEAD_DAY_COUNT = 7,
+    RECON_MODE = true,
+    ENABLE_SCREENSHOTS = true,
+  } = props.lambdaConfig.environment;
+
+  // Build restaurant url
+  const RESTAURANT_URL = `https://resy.com/cities/ny/${restaurantSlug}`;
+
+  // Build environment variables for lambda function
+  const lambdaEnvironment: LambdaEnvironmentVariables = {
+    EMAIL,
+    PASSWORD,
+    TYPE_FILTER,
+    SEAT_COUNT: String(SEAT_COUNT),
+    LOOK_AHEAD_DAY_COUNT: String(LOOK_AHEAD_DAY_COUNT),
+    RESTAURANT_URL,
+    RECON_MODE: RECON_MODE ? "TRUE" : "FALSE",
+    ENABLE_SCREENSHOTS: ENABLE_SCREENSHOTS ? "TRUE" : "FALSE",
+    S3_BUCKET_NAME: props.screenshotsBucket.bucketName,
+  };
+
+  // Build lambda name
+  const mode = RECON_MODE ? "recon" : "live";
+  const lambdaName = `${restaurantSlug}--${LOOK_AHEAD_DAY_COUNT}-days-ahead--${SEAT_COUNT}-seats--${mode}-mode`;
+
+  // Crawler Lambda
+  const botLambda = new lambda.Function(props.stack, lambdaName, {
+    code: new lambda.AssetCode("src/scrape-pdfs-from-website"),
+    handler: "lambda.handler",
+    runtime: lambda.Runtime.NODEJS_12_X,
+    timeout: cdk.Duration.seconds(300),
+    memorySize: 1024,
+    environment: {
+      ...lambdaEnvironment,
+    },
+  });
+
+  props.screenshotsBucket.grantReadWrite(botLambda);
+
+  // Run botLambda on schedule cron
+  const rule = new events.Rule(props.stack, `${lambdaName}-rule`, {
+    schedule: events.Schedule.expression(schedule),
+  });
+
+  // Adds scrapePdfsFromWebsiteLambda as target for scheduled rule
+  rule.addTarget(new targets.LambdaFunction(botLambda));
+}
+
+// // // //
+
 export class PdfTextractPipeline extends cdk.Stack {
   // constructor(app: cdk.App, id: string) {
   constructor(scope: cdk.Construct, id: string) {
@@ -19,78 +111,77 @@ export class PdfTextractPipeline extends cdk.Stack {
     );
 
     // // // //
-    // Provisions scrape-pdfs-from-website lambda
-    // NOTE - we bump the memory to 1024mb here to accommodate the memory requirements for Puppeteer
+    // Provision Lambdas
 
-    // DownloadURL Crawler Lambda
-    const scrapePdfsFromWebsiteLambda = new lambda.Function(
-      this,
-      "scrapePdfsFromWebsiteLambda",
+    // Define array of LambdaConfig objects
+    const lambdaConfigs: LambdaConfig[] = [
+      // Raoul's - 4-top on fridays
       {
-        code: new lambda.AssetCode("src/scrape-pdfs-from-website"),
-        handler: "lambda.handler",
-        runtime: lambda.Runtime.NODEJS_12_X,
-        timeout: cdk.Duration.seconds(300),
-        memorySize: 1024,
+        restaurantSlug: "raoulsrestaurant",
+        schedule: "cron(0 5 ? * FRI *)", // Friday@12:00:01AM
         environment: {
-          EMAIL: "john@doe.com",
-          PASSWORD: "itemId",
-          TYPE_FILTER: "Standard",
-          SEAT_COUNT: "4",
-          LOOK_AHEAD_DAY_COUNT: "30",
-          RESTAURANT_URL: "https://resy.com/cities/ny/stk-meatpacking",
-          RECON_MODE: "TRUE",
-          ENABLE_SCREENSHOTS: "TRUE",
-          S3_BUCKET_NAME: screenshotsBucket.bucketName,
+          SEAT_COUNT: 4,
+          TYPE_FILTER: "Indoor",
+          LOOK_AHEAD_DAY_COUNT: 7,
         },
-      }
-    );
-
-    screenshotsBucket.grantReadWrite(scrapePdfsFromWebsiteLambda);
-
-    // Run `scrape-pdfs-from-website` every 12 hours
-    // See https://docs.aws.amazon.com/lambda/latest/dg/tutorial-scheduled-events-schedule-expressions.html
-    const rule = new events.Rule(this, "Rule", {
-      schedule: events.Schedule.expression("cron(0 5 ? * FRI *)"),
-    });
-
-    // Adds scrapePdfsFromWebsiteLambda as target for scheduled rule
-    rule.addTarget(new targets.LambdaFunction(scrapePdfsFromWebsiteLambda));
-
-    //////////////////////
-
-    // Provisions scrape-pdfs-from-website lambda
-    // NOTE - we bump the memory to 1024mb here to accommodate the memory requirements for Puppeteer
-
-    // DownloadURL Crawler Lambda
-    const reconLambda01 = new lambda.Function(this, "reconLambda01", {
-      code: new lambda.AssetCode("src/scrape-pdfs-from-website"),
-      handler: "lambda.handler",
-      runtime: lambda.Runtime.NODEJS_12_X,
-      timeout: cdk.Duration.seconds(300),
-      memorySize: 1024,
-      environment: {
-        EMAIL: "john@doe.com",
-        PASSWORD: "itemId",
-        TYPE_FILTER: "",
-        SEAT_COUNT: "4",
-        LOOK_AHEAD_DAY_COUNT: "30",
-        RESTAURANT_URL: "https://resy.com/cities/ny/carbone",
-        RECON_MODE: "TRUE",
-        ENABLE_SCREENSHOTS: "TRUE",
-        S3_BUCKET_NAME: screenshotsBucket.bucketName,
       },
+      // I Sodi 2-top recon
+      {
+        restaurantSlug: "i-sodi",
+        environment: {
+          SEAT_COUNT: 2,
+          TYPE_FILTER: "",
+          LOOK_AHEAD_DAY_COUNT: 13,
+        },
+      },
+      // Overstory 2-top recon
+      {
+        restaurantSlug: "overstory",
+        environment: {
+          SEAT_COUNT: 2,
+          TYPE_FILTER: "",
+          LOOK_AHEAD_DAY_COUNT: 3,
+        },
+      },
+      // L'Appart 2-top recon
+      {
+        restaurantSlug: "l-appart",
+        environment: {
+          SEAT_COUNT: 2,
+          TYPE_FILTER: "",
+          LOOK_AHEAD_DAY_COUNT: 28,
+        },
+      },
+      // Ito 2-top recon
+      {
+        restaurantSlug: "ito",
+        environment: {
+          SEAT_COUNT: 2,
+          TYPE_FILTER: "",
+          LOOK_AHEAD_DAY_COUNT: 20,
+        },
+      },
+      // Looks ahead at Carbone for 2+3+4 tops 30 days out, every 30 minutes
+      ...[2, 3, 4].map((seatCount) => {
+        return {
+          restaurantSlug: "carbone",
+          environment: {
+            SEAT_COUNT: seatCount,
+            LOOK_AHEAD_DAY_COUNT: 30,
+          },
+        };
+      }),
+    ];
+
+    // // // // // s
+
+    // Loop over + provision for each lambda config
+    lambdaConfigs.forEach((config) => {
+      provisionLambda({
+        stack: this,
+        screenshotsBucket,
+        lambdaConfig: config,
+      });
     });
-
-    screenshotsBucket.grantReadWrite(reconLambda01);
-
-    // Run `scrape-pdfs-from-website` every 12 hours
-    // See https://docs.aws.amazon.com/lambda/latest/dg/tutorial-scheduled-events-schedule-expressions.html
-    const reconLambdaRule = new events.Rule(this, "reconLambdaRule", {
-      schedule: events.Schedule.expression("cron(0/30 * ? * * *)"),
-    });
-
-    // Adds reconLambda01 as target for scheduled rule
-    reconLambdaRule.addTarget(new targets.LambdaFunction(reconLambda01));
   }
 }

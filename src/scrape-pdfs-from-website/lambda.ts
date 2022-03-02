@@ -8,14 +8,14 @@ const EMAIL = process.env.EMAIL || "";
 const PASSWORD = process.env.PASSWORD || "";
 const SEAT_COUNT = process.env.SEAT_COUNT || "4";
 const LOOK_AHEAD_DAY_COUNT: number = Number(process.env.LOOK_AHEAD_DAY_COUNT);
-const TYPE_FILTER = process.env.TYPE_FILTER || "Indoor";
+// const TYPE_FILTER = process.env.TYPE_FILTER || "";
 const RECON_MODE: boolean = process.env.RECON_MODE === "TRUE";
 const ENABLE_SCREENSHOTS: boolean = process.env.ENABLE_SCREENSHOTS === "TRUE";
 const RESTAURANT_URL =
   process.env.RESTAURANT_URL || "https://resy.com/cities/ny/stk-meatpacking";
 
 // Start time of the lambda
-const startTime = Number(new Date());
+const lambdaStartTime = new Date();
 
 // // // //
 
@@ -47,8 +47,15 @@ function uploadToS3(props: { path: string }) {
     ""
   );
 
+  // Build human-readable "ran-at" directory name
+  const ranAt = lambdaStartTime
+    .toUTCString()
+    .replace(",", "")
+    .replace(/\s/g, "-")
+    .toLowerCase();
+
   // TODO - build this string
-  const destinationPath = `${restaurantName}/${getDateParam()}/${SEAT_COUNT}/${startTime}/${filename}`;
+  const destinationPath = `${restaurantName}/${getDateParam()}/${SEAT_COUNT}-top/${ranAt}/${filename}`;
 
   // Saves new file to S3
   return new Promise((resolve, reject) => {
@@ -77,7 +84,8 @@ function takeScreenshot(page: Page, filename: string) {
   if (ENABLE_SCREENSHOTS === false) {
     return;
   }
-  const filepath = `/tmp/${filename}`;
+  // builds filepath -> `/tmp/01-page-loaded.png`
+  const filepath = `/tmp/${leftPad(SCREENSHOTS.length + 1)}-${filename}`;
   SCREENSHOTS.push(filepath);
   console.log(`takeScreenshot: ${filepath}`);
   return page.screenshot({ path: filepath });
@@ -107,22 +115,41 @@ function getDateParam() {
 
 // // // //
 
-const preferredTimes = ["9:00PM", "9:15PM", "9:30PM", "9:45PM", "10:00PM"];
+// const preferredTimes = ["9:00PM", "9:15PM", "9:30PM", "9:45PM", "10:00PM"];
 
 function getPreferredReservation(allReservations: any[]) {
-  const matchesTypePreference = allReservations.filter(
-    (r) => r.type === TYPE_FILTER || TYPE_FILTER === ""
-  );
+  // No reservations available -> preffered res is always undefined
+  if (allReservations.length === 0) {
+    return undefined;
+  }
+  console.log(allReservations[0]);
+  return allReservations[0];
 
-  let preferredReservation: any = undefined;
-  preferredTimes.forEach((t) => {
-    if (preferredReservation !== undefined) {
-      return;
-    }
-    preferredReservation = matchesTypePreference.find((r) => r.time === t);
-  });
+  // Filter based on TYPE_FILTER env var
+  // const matchesTypePreference = allReservations.filter(
+  //   (r) => r.type === TYPE_FILTER || TYPE_FILTER === ""
+  // );
 
-  return preferredReservation;
+  // // No reservations available -> preffered res is always undefined
+  // if (matchesTypePreference.length === 0) {
+  //   // Return first option in recon mode
+  //   if (RECON_MODE) {
+  //     return allReservations[0];
+  //   }
+
+  //   return undefined;
+  // }
+
+  // // Find the preferred reservation
+  // let preferredReservation: any = undefined;
+  // preferredTimes.forEach((t) => {
+  //   if (preferredReservation !== undefined) {
+  //     return;
+  //   }
+  //   preferredReservation = matchesTypePreference.find((r) => r.time === t);
+  // });
+
+  // return preferredReservation;
 }
 
 // // // //
@@ -172,8 +199,8 @@ export const handler = async (
 
     await page.goto(url, { waitUntil: "domcontentloaded" });
 
-    // Delay 3 seconds
-    await delay(3000);
+    // Delay 4 seconds
+    await delay(4000);
 
     await takeScreenshot(page, "page-load.png");
 
@@ -223,7 +250,7 @@ export const handler = async (
 
     // Scroll down 800px
     await page.evaluate(() => {
-      window.scrollBy(0, 800);
+      window.scrollBy(0, 400);
     });
 
     console.log("Scroll done");
@@ -260,7 +287,9 @@ export const handler = async (
       await Promise.all(SCREENSHOTS.map((path) => uploadToS3({ path })));
       return;
     }
-    selectedReservation.button.click();
+
+    await takeScreenshot(page, "before-click-selected-res.png");
+    selectedReservation.button?.click();
 
     // Delay 5s
     await delay(5000);
@@ -269,59 +298,62 @@ export const handler = async (
 
     // Actually make the reservation
     // Short-circuit IFF RECON_MODE === TRUE
-    if (RECON_MODE === false) {
-      // Get the source of the desired iframe
-      const iframeSrc = await page.evaluate(
-        `Array.from(document.querySelectorAll('iframe')).map(f => f.getAttribute("src")).find(f => f.includes("https://widgets.resy.com"))`
-      );
+    // Get the source of the desired iframe
+    const iframeSrc = await page.evaluate(
+      `Array.from(document.querySelectorAll('iframe')).map(f => f.getAttribute("src")).find(f => f.includes("https://widgets.resy.com"))`
+    );
 
-      if (typeof iframeSrc !== "string") {
-        console.log("Iframe Source -> not found, or not a string");
-        console.log(iframeSrc);
-        return;
-      }
-
-      console.log("iframeSrc");
+    if (typeof iframeSrc !== "string") {
+      console.log("Iframe Source -> not found, or not a string");
       console.log(iframeSrc);
-
-      // Naviagate to reserve page
-      await page.goto(iframeSrc, { waitUntil: "domcontentloaded" });
-      console.log("Navigated to reserve page");
-
-      // Wait 3x
-      await delay(3000);
-
-      await takeScreenshot(page, "before-reserve.png");
-      // // // //
-
-      // Click "Reserve" button
-      const reserveButton = await page.$(".Button--primary");
-      await reserveButton?.click();
-      console.log(`reserveButton Defined? ${String(!!reserveButton)}`);
-
-      await delay(2000);
-
-      await takeScreenshot(page, "before-confirm.png");
-
-      // Click "Confirm" button
-      const confirmButton = await page.$(".Button--double-confirm");
-      await confirmButton?.click();
-      console.log(`ConfirmButton Defined? ${String(!!confirmButton)}`);
-      console.log("Reservation confirmed!");
-
-      await takeScreenshot(page, "after-confirm.png");
-
-      console.log("Start delay");
-      await delay(4000);
-      console.log("End delay");
-
-      // Log "reserving" message
-      console.log(
-        `Reserving: table for ${SEAT_COUNT} at ${selectedReservation.time} on ${dateParam}`
-      );
-
-      await takeScreenshot(page, "after-reservation.png");
+      return;
     }
+
+    console.log("iframeSrc");
+    console.log(iframeSrc);
+
+    // Naviagate to reserve page
+    await page.goto(iframeSrc, { waitUntil: "domcontentloaded" });
+    console.log("Navigated to reserve page");
+
+    // Wait 3x
+    await delay(3000);
+
+    await takeScreenshot(page, "before-reserve.png");
+    // // // //
+
+    // Click "Reserve" button
+    const reserveButton = await page.$(".Button--primary");
+
+    // Only click reserveButton when RECON_MODE is false
+    if (RECON_MODE === false) {
+      await reserveButton?.click();
+    }
+
+    console.log(`reserveButton Defined? ${String(!!reserveButton)}`);
+
+    await delay(2000);
+
+    await takeScreenshot(page, "before-confirm.png");
+
+    // Click "Confirm" button
+    const confirmButton = await page.$(".Button--double-confirm");
+    await confirmButton?.click();
+    console.log(`ConfirmButton Defined? ${String(!!confirmButton)}`);
+    console.log("Reservation confirmed!");
+
+    await takeScreenshot(page, "after-confirm.png");
+
+    console.log("Start delay");
+    await delay(4000);
+    console.log("End delay");
+
+    // Log "reserving" message
+    console.log(
+      `Reserving: table for ${SEAT_COUNT} at ${selectedReservation.time} on ${dateParam}`
+    );
+
+    await takeScreenshot(page, "after-reservation.png");
 
     // // // // //
 
