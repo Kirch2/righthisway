@@ -8,7 +8,7 @@ const EMAIL = process.env.EMAIL || "";
 const PASSWORD = process.env.PASSWORD || "";
 const SEAT_COUNT = process.env.SEAT_COUNT || "4";
 const LOOK_AHEAD_DAY_COUNT: number = Number(process.env.LOOK_AHEAD_DAY_COUNT);
-// const TYPE_FILTER = process.env.TYPE_FILTER || "";
+const TYPE_FILTER = process.env.TYPE_FILTER || "";
 const RECON_MODE: boolean = process.env.RECON_MODE === "TRUE";
 const ENABLE_SCREENSHOTS: boolean = process.env.ENABLE_SCREENSHOTS === "TRUE";
 const RESTAURANT_URL =
@@ -115,41 +115,57 @@ function getDateParam() {
 
 // // // //
 
-// const preferredTimes = ["9:00PM", "9:15PM", "9:30PM", "9:45PM", "10:00PM"];
+const preferredTimes = [
+  "9:00PM",
+  "9:15PM",
+  "9:30PM",
+  "9:45PM",
+  "10:00PM",
+  "4:30PM",
+];
 
 function getPreferredReservation(allReservations: any[]) {
   // No reservations available -> preffered res is always undefined
   if (allReservations.length === 0) {
     return undefined;
   }
-  console.log(allReservations[0]);
-  return allReservations[0];
+
+  // Debug
+  console.log(`TYPE_FILTER: ${TYPE_FILTER}`);
+  console.log(`TYPE_FILTER_EMPTY: ${String(TYPE_FILTER === "")}`);
 
   // Filter based on TYPE_FILTER env var
-  // const matchesTypePreference = allReservations.filter(
-  //   (r) => r.type === TYPE_FILTER || TYPE_FILTER === ""
-  // );
+  // Only filter if TYPE_FILTER is present
+  let matchesTypePreference = allReservations;
+  if (TYPE_FILTER) {
+    matchesTypePreference = allReservations.filter(
+      (r) => r.type === TYPE_FILTER
+    );
+  }
 
-  // // No reservations available -> preffered res is always undefined
-  // if (matchesTypePreference.length === 0) {
-  //   // Return first option in recon mode
-  //   if (RECON_MODE) {
-  //     return allReservations[0];
-  //   }
+  // Find the preferred reservation
+  let preferredReservation: any = undefined;
+  preferredTimes.forEach((t) => {
+    if (preferredReservation !== undefined) {
+      return;
+    }
+    preferredReservation = matchesTypePreference.find((r) => r.time === t);
+  });
 
-  //   return undefined;
-  // }
+  // No reservations available -> preffered res is always undefined
+  if (preferredReservation === undefined) {
+    console.log("No preferred reservation found");
+    // Return first option in recon mode
+    if (RECON_MODE) {
+      console.log("RECON MODE - Return first available");
+      return allReservations[0];
+    }
 
-  // // Find the preferred reservation
-  // let preferredReservation: any = undefined;
-  // preferredTimes.forEach((t) => {
-  //   if (preferredReservation !== undefined) {
-  //     return;
-  //   }
-  //   preferredReservation = matchesTypePreference.find((r) => r.time === t);
-  // });
+    return undefined;
+  }
 
-  // return preferredReservation;
+  // Return preferred reservation
+  return preferredReservation;
 }
 
 // // // //
