@@ -39,6 +39,7 @@ export class PdfTextractPipeline extends cdk.Stack {
           SEAT_COUNT: "4",
           RESTAURANT_URL: "https://resy.com/cities/ny/stk-meatpacking",
           RECON_MODE: "TRUE",
+          ENABLE_SCREENSHOTS: "TRUE",
           S3_BUCKET_NAME: screenshotsBucket.bucketName,
         },
       }
