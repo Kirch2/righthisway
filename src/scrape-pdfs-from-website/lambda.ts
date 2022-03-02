@@ -107,7 +107,7 @@ const preferredTimes = ["9:00PM", "9:15PM", "9:30PM", "9:45PM", "10:00PM"];
 
 function getPreferredReservation(allReservations: any[]) {
   const matchesTypePreference = allReservations.filter(
-    (r) => r.type === TYPE_FILTER
+    (r) => r.type === TYPE_FILTER || TYPE_FILTER === ""
   );
 
   let preferredReservation: any = undefined;
