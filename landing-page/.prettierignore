@@ -1,0 +1,3 @@
+# Ignores test snapshots
+src/**/__tests__/__snapshots__/
+.next

@@ -1,0 +1,34 @@
+{
+  "id": "",
+  "identifiers": {
+    "title": "Righthisway",
+    "snake": "righthisway",
+    "camel": "righthisway",
+    "pascal": "Righthisway",
+    "kebab": "righthisway"
+  },
+  "pluginID": "react-next-ts-website-starter-variant",
+  "pluginVersion": "0.1.0",
+  "schemas": [],
+  "relations": [],
+  "configuration": {
+    "configure": {
+      "tooling": {
+        "jest": true,
+        "prettier": true,
+        "eslint": true,
+        "storybook": true
+      },
+      "icons": {
+        "fontawesome": false,
+        "heroicons": true
+      },
+      "analytics": {
+        "googleAnalytics": true
+      },
+      "hosting": {
+        "platform": "docker"
+      }
+    }
+  }
+}
