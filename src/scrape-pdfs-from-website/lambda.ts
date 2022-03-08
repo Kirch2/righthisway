@@ -2,6 +2,7 @@ import * as chromium from "chrome-aws-lambda";
 import * as fs from "fs";
 import * as AWS from "aws-sdk";
 import { Page } from "puppeteer";
+import { getPreferredReservation } from "./getPreferredReservation";
 const s3obj = new AWS.S3();
 const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || "";
 const EMAIL = process.env.EMAIL || "";
@@ -111,61 +112,6 @@ function getDateParam() {
   const year = reservationDate.getUTCFullYear();
   const dateParam = `${year}-${leftPad(month)}-${leftPad(day)}`;
   return dateParam;
-}
-
-// // // //
-
-const preferredTimes = [
-  "9:00PM",
-  "9:15PM",
-  "9:30PM",
-  "9:45PM",
-  "10:00PM",
-  "4:30PM",
-];
-
-function getPreferredReservation(allReservations: any[]) {
-  // No reservations available -> preffered res is always undefined
-  if (allReservations.length === 0) {
-    return undefined;
-  }
-
-  // Debug
-  console.log(`TYPE_FILTER: ${TYPE_FILTER}`);
-  console.log(`TYPE_FILTER_EMPTY: ${String(TYPE_FILTER === "")}`);
-
-  // Filter based on TYPE_FILTER env var
-  // Only filter if TYPE_FILTER is present
-  let matchesTypePreference = allReservations;
-  if (TYPE_FILTER) {
-    matchesTypePreference = allReservations.filter(
-      (r) => r.type === TYPE_FILTER
-    );
-  }
-
-  // Find the preferred reservation
-  let preferredReservation: any = undefined;
-  preferredTimes.forEach((t) => {
-    if (preferredReservation !== undefined) {
-      return;
-    }
-    preferredReservation = matchesTypePreference.find((r) => r.time === t);
-  });
-
-  // No reservations available -> preffered res is always undefined
-  if (preferredReservation === undefined) {
-    console.log("No preferred reservation found");
-    // Return first option in recon mode
-    if (RECON_MODE) {
-      console.log("RECON MODE - Return first available");
-      return allReservations[0];
-    }
-
-    return undefined;
-  }
-
-  // Return preferred reservation
-  return preferredReservation;
 }
 
 // // // //
@@ -296,7 +242,11 @@ export const handler = async (
       })
     );
 
-    const selectedReservation = getPreferredReservation(availableReservations);
+    const selectedReservation = getPreferredReservation(
+      availableReservations,
+      TYPE_FILTER,
+      RECON_MODE
+    );
     if (!selectedReservation) {
       console.log("no available reservations");
       // Upload all screenshots to S3
