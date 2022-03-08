@@ -205,6 +205,22 @@ export const handler = async (
     }
 
     // // // // //
+
+    // wait for next minute
+
+    const curSeconds: number = new Date().getSeconds();
+    const waitTime: number = 60 - curSeconds;
+    console.log(`wait until next minute: ${waitTime} seconds`);
+    await delay(waitTime);
+    console.log("reloading page");
+
+    await page.reload();
+
+    // Wait 1.5 seconds
+
+    await delay(1500);
+
+    // // // // //
     // // // // //
     // MAKE RESERVATION
 

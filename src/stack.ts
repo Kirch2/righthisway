@@ -41,7 +41,7 @@ interface ProvisionLambdaProps {
 }
 
 function provisionLambda(props: ProvisionLambdaProps) {
-  const { restaurantSlug, schedule = "cron(0/30 * ? * * *)" } =
+  const { restaurantSlug, schedule = "cron(29/59 * ? * * *)" } =
     props.lambdaConfig;
   const {
     EMAIL = "john@doe.com",
