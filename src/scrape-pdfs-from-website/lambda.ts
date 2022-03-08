@@ -6,6 +6,9 @@ import { getPreferredReservation } from "./getPreferredReservation";
 const s3obj = new AWS.S3();
 const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || "";
 const EMAIL = process.env.EMAIL || "";
+const db = new AWS.DynamoDB.DocumentClient();
+const TABLE_NAME = process.env.TABLE_NAME || "";
+const PRIMARY_KEY = process.env.PRIMARY_KEY || "";
 const PASSWORD = process.env.PASSWORD || "";
 const SEAT_COUNT = process.env.SEAT_COUNT || "4";
 const LOOK_AHEAD_DAY_COUNT: number = Number(process.env.LOOK_AHEAD_DAY_COUNT);
@@ -116,6 +119,33 @@ function getDateParam() {
 
 // // // //
 
+function saveToDB(props: { time: string; type: string; seatCount: string }) {
+  const { time, type, seatCount } = props;
+  const slug = RESTAURANT_URL.replace("https://resy.com/cities/ny/", "");
+  const dateParam = getDateParam();
+  const documentId = `res-${slug}-${time}-${type}-${seatCount}-${dateParam}`;
+  // Defines the item we're inserting into the database
+  const item: any = {
+    [PRIMARY_KEY]: documentId,
+    restaurant: slug,
+    date: dateParam,
+    time,
+    type,
+    seatCount,
+  };
+
+  // Defines the params for db.put
+  const params = {
+    TableName: TABLE_NAME,
+    Item: item,
+  };
+
+  // Inserts the record into the DynamoDB table
+  return db.put(params).promise();
+}
+
+// // // //
+
 export const handler = async (
   event: any = {},
   context: any = {}
@@ -211,13 +241,13 @@ export const handler = async (
     const curSeconds: number = new Date().getSeconds();
     const waitTime: number = 60 - curSeconds;
     console.log(`wait until next minute: ${waitTime} seconds`);
-    await delay(waitTime);
+    await delay(waitTime * 1000);
     console.log("reloading page");
 
     await page.reload();
+    console.log("page reloaded");
 
     // Wait 1.5 seconds
-
     await delay(1500);
 
     // // // // //
@@ -235,8 +265,8 @@ export const handler = async (
 
     await takeScreenshot(page, "after-scroll.png");
 
-    // Delay 2.5s
-    await delay(2500);
+    // Delay 1.5s
+    await delay(1500);
 
     console.log("Start reservation lookup");
     const availableReservations: any[] = [];
@@ -267,6 +297,15 @@ export const handler = async (
       console.log("no available reservations");
       // Upload all screenshots to S3
       await Promise.all(SCREENSHOTS.map((path) => uploadToS3({ path })));
+      await Promise.all(
+        availableReservations.map((r) => {
+          return saveToDB({
+            seatCount: SEAT_COUNT,
+            time: r.time,
+            type: r.type,
+          });
+        })
+      );
       return;
     }
 
@@ -341,6 +380,16 @@ export const handler = async (
 
     // Upload all screenshots to S3
     await Promise.all(SCREENSHOTS.map((path) => uploadToS3({ path })));
+
+    await Promise.all(
+      availableReservations.map((r) => {
+        return saveToDB({
+          seatCount: SEAT_COUNT,
+          time: r.time,
+          type: r.type,
+        });
+      })
+    );
 
     // // // // //
 

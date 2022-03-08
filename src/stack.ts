@@ -1,5 +1,6 @@
 import * as events from "@aws-cdk/aws-events";
 import * as targets from "@aws-cdk/aws-events-targets";
+import * as dynamodb from "@aws-cdk/aws-dynamodb";
 import * as lambda from "@aws-cdk/aws-lambda";
 import * as s3 from "@aws-cdk/aws-s3";
 import * as cdk from "@aws-cdk/core";
@@ -16,6 +17,8 @@ interface LambdaEnvironmentVariables {
   RECON_MODE: string;
   ENABLE_SCREENSHOTS: string;
   S3_BUCKET_NAME: string;
+  TABLE_NAME: string;
+  PRIMARY_KEY: string;
 }
 
 interface LambdaEnvironmentInput {
@@ -37,11 +40,12 @@ interface LambdaConfig {
 interface ProvisionLambdaProps {
   stack: any; // TODO - add correct type
   screenshotsBucket: s3.Bucket;
+  reservationsTable: dynamodb.Table;
   lambdaConfig: LambdaConfig;
 }
 
 function provisionLambda(props: ProvisionLambdaProps) {
-  const { restaurantSlug, schedule = "cron(29/59 * ? * * *)" } =
+  const { restaurantSlug, schedule = "cron(29,59 * ? * * *)" } =
     props.lambdaConfig;
   const {
     EMAIL = "john@doe.com",
@@ -67,6 +71,8 @@ function provisionLambda(props: ProvisionLambdaProps) {
     RECON_MODE: RECON_MODE ? "TRUE" : "FALSE",
     ENABLE_SCREENSHOTS: ENABLE_SCREENSHOTS ? "TRUE" : "FALSE",
     S3_BUCKET_NAME: props.screenshotsBucket.bucketName,
+    TABLE_NAME: props.reservationsTable.tableName,
+    PRIMARY_KEY: "itemId",
   };
 
   // Build lambda name
@@ -86,6 +92,7 @@ function provisionLambda(props: ProvisionLambdaProps) {
   });
 
   props.screenshotsBucket.grantReadWrite(botLambda);
+  props.reservationsTable.grantReadWriteData(botLambda);
 
   // Run botLambda on schedule cron
   const rule = new events.Rule(props.stack, `${lambdaName}-rule`, {
@@ -109,6 +116,19 @@ export class PdfTextractPipeline extends cdk.Stack {
       this,
       "righthisway_screenshots_bucket"
     );
+
+    // Defines pdfUrlsTable for PDF Download URLs
+    const reservationsTable = new dynamodb.Table(this, "reservations", {
+      partitionKey: {
+        name: "itemId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      stream: dynamodb.StreamViewType.NEW_IMAGE,
+      tableName: "reservations",
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // NOTE - This removalPolicy is NOT recommended for production code
+    });
+
+    //    pdfUrlsTable.grantReadWriteData(downloadPdfToS3Lambda);
 
     // // // //
     // Provision Lambdas
@@ -180,6 +200,7 @@ export class PdfTextractPipeline extends cdk.Stack {
       provisionLambda({
         stack: this,
         screenshotsBucket,
+        reservationsTable,
         lambdaConfig: config,
       });
     });
