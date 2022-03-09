@@ -44,8 +44,10 @@ interface ProvisionLambdaProps {
   lambdaConfig: LambdaConfig;
 }
 
+// NOTE - this is the `cron(...)` for running at x:29 + x:59 every hour
+// "cron(29,59 * ? * * *)"
 function provisionLambda(props: ProvisionLambdaProps) {
-  const { restaurantSlug, schedule = "cron(29,59 * ? * * *)" } =
+  const { restaurantSlug, schedule = "cron(14,29,44,59 * ? * * *)" } =
     props.lambdaConfig;
   const {
     EMAIL = "john@doe.com",
@@ -54,7 +56,7 @@ function provisionLambda(props: ProvisionLambdaProps) {
     SEAT_COUNT = 4,
     LOOK_AHEAD_DAY_COUNT = 7,
     RECON_MODE = true,
-    ENABLE_SCREENSHOTS = true,
+    ENABLE_SCREENSHOTS = false,
   } = props.lambdaConfig.environment;
 
   // Build restaurant url
