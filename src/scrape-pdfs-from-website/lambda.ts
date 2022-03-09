@@ -153,7 +153,7 @@ function saveMetaToDB(props: { restaurantMeta: any }) {
     [PRIMARY_KEY]: documentId,
     restaurant: slug,
     ranAt,
-    metadata: props.restaurantMeta?.results?.venues[0],
+    metadata: props.restaurantMeta,
   };
 
   // Defines the params for db.put
@@ -222,7 +222,7 @@ export const handler = async (
 
       // If the requestUrl is hitting api/v4/find -> capture response
       // if (requestUrl.includes("https://api.resy.com/4/find")) {
-      if (requestUrl.includes("https://api.resy.com/3")) {
+      if (requestUrl.includes("https://api.resy.com/")) {
         console.log("Parsing JSON response");
         try {
           restaurantMeta = await response.json();
@@ -286,7 +286,6 @@ export const handler = async (
     // // // // //
 
     // wait for next minute
-
     const startMin = lambdaStartTime.getMinutes();
     const currentMin = new Date().getMinutes();
     let waitTime: number = 1;
@@ -300,11 +299,11 @@ export const handler = async (
     await delay(waitTime);
     console.log("reloading page");
 
-    await page.reload();
+    await page.reload({ waitUntil: "domcontentloaded" });
     console.log("page reloaded");
 
-    // Wait 1.5 seconds
-    await delay(1500);
+    // Wait 1.0 seconds
+    await delay(1000);
 
     // // // // //
     // // // // //
@@ -312,7 +311,7 @@ export const handler = async (
 
     console.log("Scroll start");
 
-    // Scroll down 800px
+    // Scroll down 400px
     await page.evaluate(() => {
       window.scrollBy(0, 400);
     });
@@ -321,8 +320,8 @@ export const handler = async (
 
     await takeScreenshot(page, "after-scroll.png");
 
-    // Delay 1.5s
-    await delay(1500);
+    // Delay 1.0s
+    await delay(1000);
 
     console.log("Start reservation lookup");
     const availableReservations: any[] = [];
@@ -371,7 +370,7 @@ export const handler = async (
     selectedReservation.button?.click();
 
     // Delay 5s
-    await delay(5000);
+    await delay(2500);
 
     await takeScreenshot(page, "after-delay.png");
 
@@ -396,7 +395,7 @@ export const handler = async (
     console.log("Navigated to reserve page");
 
     // Wait 3x
-    await delay(3000);
+    await delay(1500);
 
     await takeScreenshot(page, "before-reserve.png");
     // // // //
@@ -411,7 +410,7 @@ export const handler = async (
 
     console.log(`reserveButton Defined? ${String(!!reserveButton)}`);
 
-    await delay(2000);
+    await delay(1000);
 
     await takeScreenshot(page, "before-confirm.png");
 
