@@ -21,6 +21,13 @@ const RESTAURANT_URL =
 // Start time of the lambda
 const lambdaStartTime = new Date();
 
+// Build human-readable "ran-at" directory name
+const ranAt = lambdaStartTime
+  .toUTCString()
+  .replace(",", "")
+  .replace(/\s/g, "-")
+  .toLowerCase();
+
 // // // //
 
 // Define "delay" function
@@ -50,13 +57,6 @@ function uploadToS3(props: { path: string }) {
     "https://resy.com/cities/ny/",
     ""
   );
-
-  // Build human-readable "ran-at" directory name
-  const ranAt = lambdaStartTime
-    .toUTCString()
-    .replace(",", "")
-    .replace(/\s/g, "-")
-    .toLowerCase();
 
   // TODO - build this string
   const destinationPath = `${restaurantName}/${getDateParam()}/${SEAT_COUNT}-top/${ranAt}/${filename}`;
@@ -132,6 +132,28 @@ function saveToDB(props: { time: string; type: string; seatCount: string }) {
     time,
     type,
     seatCount,
+    ranAt,
+  };
+
+  // Defines the params for db.put
+  const params = {
+    TableName: TABLE_NAME,
+    Item: item,
+  };
+
+  // Inserts the record into the DynamoDB table
+  return db.put(params).promise();
+}
+
+function saveMetaToDB(props: { restaurantMeta: any }) {
+  const slug = RESTAURANT_URL.replace("https://resy.com/cities/ny/", "");
+  const documentId = `restaurant-meta-${slug}`;
+  // Defines the item we're inserting into the database
+  const item: any = {
+    [PRIMARY_KEY]: documentId,
+    restaurant: slug,
+    ranAt,
+    metadata: props.restaurantMeta?.results?.venues[0],
   };
 
   // Defines the params for db.put
@@ -184,6 +206,33 @@ export const handler = async (
     let page = await browser.newPage();
 
     console.log("Page Created");
+
+    // Setup network callback
+    let restaurantMeta: any = null;
+    page.on("response", async (response) => {
+      // console.log("Response callback");
+      if (restaurantMeta !== null) return;
+
+      // Get the request
+      const req = response.request();
+
+      // Get the url of the request
+      const requestUrl = req.url();
+      console.log(`Response from ${requestUrl}`);
+
+      // If the requestUrl is hitting api/v4/find -> capture response
+      // if (requestUrl.includes("https://api.resy.com/4/find")) {
+      if (requestUrl.includes("https://api.resy.com/3")) {
+        console.log("Parsing JSON response");
+        try {
+          restaurantMeta = await response.json();
+        } catch (e) {
+          console.log("Error parsing");
+          console.log(e);
+        }
+        console.log("Captured restaurant metadata");
+      }
+    });
 
     // console.log("10 second delay start");
     // delay(10 * 1000);
@@ -238,10 +287,17 @@ export const handler = async (
 
     // wait for next minute
 
-    const curSeconds: number = new Date().getSeconds();
-    const waitTime: number = 60 - curSeconds;
+    const startMin = lambdaStartTime.getMinutes();
+    const currentMin = new Date().getMinutes();
+    let waitTime: number = 1;
+    if (startMin === currentMin) {
+      console.log("counting down to next min");
+      const curSeconds: number = new Date().getSeconds();
+      waitTime = (60 - curSeconds) * 1000;
+    }
+
     console.log(`wait until next minute: ${waitTime} seconds`);
-    await delay(waitTime * 1000);
+    await delay(waitTime);
     console.log("reloading page");
 
     await page.reload();
@@ -306,6 +362,8 @@ export const handler = async (
           });
         })
       );
+      // Save restaurant meta to database
+      await saveMetaToDB({ restaurantMeta });
       return;
     }
 
@@ -390,6 +448,9 @@ export const handler = async (
         });
       })
     );
+
+    // Save restaurant meta to database
+    await saveMetaToDB({ restaurantMeta });
 
     // // // // //
 
