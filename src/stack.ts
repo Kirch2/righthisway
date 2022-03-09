@@ -138,7 +138,7 @@ export class PdfTextractPipeline extends cdk.Stack {
       // Raoul's - 4-top on fridays
       {
         restaurantSlug: "raoulsrestaurant",
-        schedule: "cron(0 5 ? * FRI *)", // Friday@12:00:01AM
+        schedule: "cron(59 4 ? * FRI *)", // Friday@12:00:01AM
         environment: {
           SEAT_COUNT: 4,
           TYPE_FILTER: "Indoor",
