@@ -1,4 +1,5 @@
-#Description :mag: Configurable automation tool for booking restaurant reservations on Resy.com
+# righthisway
+:mag: Configurable automation tool for booking restaurant reservations on Resy.com
 
 
 
