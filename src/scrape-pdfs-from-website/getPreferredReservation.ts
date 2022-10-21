@@ -1,13 +1,4 @@
-const preferredTimes = [
-  "9:00PM",
-  "9:15PM",
-  "9:30PM",
-  "8:15",
-  "8:30",
-  "8:45",
-  "9:45PM",
-  "10:00PM",
-];
+const preferredTimes = ["10:00PM", "10:15PM", "9:30PM", "9:45PM", "10:30PM"];
 
 export function getPreferredReservation(
   allReservations: any[],
