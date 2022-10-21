@@ -51,7 +51,7 @@ function provisionLambda(props: ProvisionLambdaProps) {
     props.lambdaConfig;
   const {
     EMAIL = "john@doe.com",
-    PASSWORD = "mypasword123",
+    PASSWORD = "mypassword123",
     TYPE_FILTER = "",
     SEAT_COUNT = 4,
     LOOK_AHEAD_DAY_COUNT = 7,
@@ -140,7 +140,7 @@ export class PdfTextractPipeline extends cdk.Stack {
       // Raoul's - 4-top on fridays
       {
         restaurantSlug: "raoulsrestaurant",
-        schedule: "cron(59 4 ? * FRI *)", // Friday@12:00:01AM
+        schedule: "cron(59 3 ? * FRI *)", // Friday@12:00:01AM
         environment: {
           SEAT_COUNT: 4,
           TYPE_FILTER: "Indoor",
@@ -187,6 +187,7 @@ export class PdfTextractPipeline extends cdk.Stack {
       ...[2, 3, 4].map((seatCount) => {
         return {
           restaurantSlug: "carbone",
+          schedule: "cron(59 13 ? * * *)", // Every day 10:00:01AM
           environment: {
             SEAT_COUNT: seatCount,
             LOOK_AHEAD_DAY_COUNT: 30,
